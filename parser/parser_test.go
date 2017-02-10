@@ -8,72 +8,6 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
-/// constructor short-cuts
-
-func _int(v string) *SExpInt {
-	return &SExpInt{literal: v}
-}
-
-func _float(v string) *SExpFloat {
-	return &SExpFloat{literal: v}
-}
-
-func _symbol(v string) *SExpSymbol {
-	return &SExpSymbol{literal: v}
-}
-
-func _char(v string) *SExpChar {
-	return &SExpChar{literal: v}
-}
-
-func _string(v string) *SExpString {
-	return &SExpString{literal: v}
-}
-
-func _nil() *SExpNil {
-	return &SExpNil{}
-}
-
-func _cons(v1 SExp, v2 SExp) *SExpCons {
-	return &SExpCons{car: v1, cdr: v2}
-}
-
-func _list(vs []SExp) *SExpList {
-	return &SExpList{elements: vs}
-}
-
-func _listv(vs ...SExp) *SExpList {
-	return &SExpList{elements: vs}
-}
-
-func _vectorv(vs ...SExp) *SExpVector {
-	return &SExpVector{elements: vs}
-}
-
-func _dotlist(vs []SExp, v2 SExp) *SExpListDot {
-	return &SExpListDot{elements: vs, last: v2}
-}
-
-func _q(v SExp) *SExpQuoted {
-	return &SExpQuoted{sexp: v}
-}
-
-func _qq(v SExp) *SExpQuasiQuoted {
-	return &SExpQuasiQuoted{sexp: v}
-}
-
-func _qf(v SExp) *SExpQuoted {
-	return &SExpQuoted{sexp: v, function: true}
-}
-
-func _unq(v SExp) *SExpUnquote {
-	return &SExpUnquote{sexp: v, splice: false}
-}
-
-func _unqs(v SExp) *SExpUnquote {
-	return &SExpUnquote{sexp: v, splice: true}
-}
-
 /// test utils
 
 func compareString(t *testing.T, msg string, v1 SExp, v2 SExp) {
@@ -104,8 +38,8 @@ func TestNormal(t *testing.T) {
 	res, _ := Parse(src)
 	//pp.Println(res)
 	exp := []SExp{
-		_listv(_int("1"), _int("2")),
-		_listv(_int("3"), _int("4")),
+		AstListv(AstInt("1"), AstInt("2")),
+		AstListv(AstInt("3"), AstInt("4")),
 	}
 	//pp.Println(exp)
 	compareString(t, "Normal 1", res[0], exp[0])
@@ -119,26 +53,26 @@ type srcexp struct {
 
 func TestListStructures(t *testing.T) {
 	data := map[string]srcexp{
-		"nil list": srcexp{"()", _nil()},
-		"list1":    srcexp{"(1)", _listv(_int("1"))},
+		"nil list": srcexp{"()", AstNil()},
+		"list1":    srcexp{"(1)", AstListv(AstInt("1"))},
 		"list2": srcexp{"(1 2)",
-			_listv(_int("1"), _int("2"))},
+			AstListv(AstInt("1"), AstInt("2"))},
 		"nest list1": srcexp{"(1 (2 3) 4)",
-			_listv(_int("1"), _listv(_int("2"), _int("3")), _int("4"))},
+			AstListv(AstInt("1"), AstListv(AstInt("2"), AstInt("3")), AstInt("4"))},
 		"nest list2": srcexp{"(((1)))",
-			_listv(_listv(_listv(_int("1"))))},
+			AstListv(AstListv(AstListv(AstInt("1"))))},
 		"type values": srcexp{`(1 'a "b" ())`,
-			_listv(_int("1"), _q(_symbol("a")), _string("b"), _nil())},
+			AstListv(AstInt("1"), AstQ(AstSymbol("a")), AstString("b"), AstNil())},
 		"calc terms": srcexp{"(+ 1 2 (- 2 (* 3 4)))",
-			_listv(_symbol("+"), _int("1"), _int("2"),
-				_listv(_symbol("-"), _int("2"),
-					_listv(_symbol("*"), _int("3"), _int("4"))))},
+			AstListv(AstSymbol("+"), AstInt("1"), AstInt("2"),
+				AstListv(AstSymbol("-"), AstInt("2"),
+					AstListv(AstSymbol("*"), AstInt("3"), AstInt("4"))))},
 		"reverse cons list": srcexp{"(((1.0) 0.2) 3.4e+4)",
-			_listv(_listv(_listv(_float("1.0")), _float("0.2")), _float("3.4e+4"))},
+			AstListv(AstListv(AstListv(AstFloat("1.0")), AstFloat("0.2")), AstFloat("3.4e+4"))},
 		"cons cell": srcexp{"(1 . 2)",
-			_cons(_int("1"), _int("2"))},
+			AstCons(AstInt("1"), AstInt("2"))},
 		"dot list": srcexp{"(1 2 . 3)",
-			_dotlist([]SExp{_int("1"), _int("2")}, _int("3"))},
+			AstDotlist([]SExp{AstInt("1"), AstInt("2")}, AstInt("3"))},
 	}
 	for k, v := range data {
 		testSExp(t, k, v.src, v.exp)
@@ -219,11 +153,11 @@ func TestError2(t *testing.T) {
 func TestQuasiQuote(t *testing.T) {
 	data := map[string]srcexp{
 		"quasiquoted list1": srcexp{"`(1 ,a)",
-			_qq(_listv(_int("1"), _unq(_symbol("a"))))},
+			AstQq(AstListv(AstInt("1"), AstUnq(AstSymbol("a"))))},
 		"quasiquoted list2": srcexp{"`(1 ,@ab)",
-			_qq(_listv(_int("1"), _unqs(_symbol("ab"))))},
+			AstQq(AstListv(AstInt("1"), AstUnqs(AstSymbol("ab"))))},
 		"quasiquoted nested list": srcexp{"`(1 ,(+ 1 2))",
-			_qq(_listv(_int("1"), _unq(_listv(_symbol("+"), _int("1"), _int("2")))))},
+			AstQq(AstListv(AstInt("1"), AstUnq(AstListv(AstSymbol("+"), AstInt("1"), AstInt("2")))))},
 	}
 	for k, v := range data {
 		testSExp(t, k, v.src, v.exp)
@@ -233,9 +167,9 @@ func TestQuasiQuote(t *testing.T) {
 func TestVectorLiteral(t *testing.T) {
 	data := map[string]srcexp{
 		"null vector": srcexp{"[]",
-			_vectorv()},
+			AstVectorv()},
 		"vector": srcexp{"[1 2 3]",
-			_vectorv(_int("1"), _int("2"), _int("3"))},
+			AstVectorv(AstInt("1"), AstInt("2"), AstInt("3"))},
 	}
 	for k, v := range data {
 		testSExp(t, k, v.src, v.exp)
@@ -245,10 +179,10 @@ func TestVectorLiteral(t *testing.T) {
 func TestSymbols(t *testing.T) {
 	data := map[string]srcexp{
 		"symbol": srcexp{`'(| (1 2) - (3 4))`,
-			_q(_listv(_symbol("|"), _listv(_int("1"), _int("2")),
-				_symbol("-"), _listv(_int("3"), _int("4"))))},
+			AstQ(AstListv(AstSymbol("|"), AstListv(AstInt("1"), AstInt("2")),
+				AstSymbol("-"), AstListv(AstInt("3"), AstInt("4"))))},
 		"function symbol": srcexp{`(#'funcname)`,
-			_listv(_qf(_symbol("funcname")))},
+			AstListv(AstQf(AstSymbol("funcname")))},
 	}
 	for k, v := range data {
 		testSExp(t, k, v.src, v.exp)
@@ -258,13 +192,13 @@ func TestSymbols(t *testing.T) {
 func TestCharLiteral(t *testing.T) {
 	data := map[string]srcexp{
 		"char normal": srcexp{"?x",
-			_char("x")},
+			AstChar("x")},
 		"char space": srcexp{"? ",
-			_char(" ")},
+			AstChar(" ")},
 		"char escape1": srcexp{"?\\n",
-			_char("\\n")},
+			AstChar("\\n")},
 		"char escape2": srcexp{"?\\(",
-			_char("\\(")},
+			AstChar("\\(")},
 	}
 	for k, v := range data {
 		testSExp(t, k, v.src, v.exp)
