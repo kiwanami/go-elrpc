@@ -6,18 +6,12 @@ import (
 )
 
 type SExp interface {
-	IsAtom() bool
-	IsCons() bool
-	IsList() bool
-	ToSExpString() string
-	ToValue() interface{}
+	ToSExpString() string // express in S-exp string
+	ToValue() interface{} // transform content of this AST into Go object
 }
 
 type SExpAtom struct{}
 
-func (s *SExpAtom) IsAtom() bool         { return true }
-func (s *SExpAtom) IsCons() bool         { return false }
-func (s *SExpAtom) IsList() bool         { return false }
 func (s *SExpAtom) ToSExpString() string { return "--ATOM--" }
 
 type SExpNil struct {
@@ -103,9 +97,6 @@ func (s *SExpFloat) ToValue() interface{} {
 
 type AbstSExpCons struct{}
 
-func (s *AbstSExpCons) IsAtom() bool         { return false }
-func (s *AbstSExpCons) IsCons() bool         { return true }
-func (s *AbstSExpCons) IsList() bool         { return false }
 func (s *AbstSExpCons) ToSExpString() string { return "--CONS--" }
 
 type SExpCons struct {
@@ -214,9 +205,6 @@ type SExpQuoted struct {
 	function bool
 }
 
-func (s *SExpQuoted) IsAtom() bool { return false }
-func (s *SExpQuoted) IsCons() bool { return false }
-func (s *SExpQuoted) IsList() bool { return false }
 func (s *SExpQuoted) ToSExpString() string {
 	ret := ""
 	if s.function {
@@ -232,9 +220,6 @@ type SExpQuasiQuoted struct {
 	sexp SExp
 }
 
-func (s *SExpQuasiQuoted) IsAtom() bool { return false }
-func (s *SExpQuasiQuoted) IsCons() bool { return false }
-func (s *SExpQuasiQuoted) IsList() bool { return false }
 func (s *SExpQuasiQuoted) ToSExpString() string {
 	return "`" + s.sexp.ToSExpString()
 }
@@ -247,10 +232,6 @@ type SExpUnquote struct {
 	splice bool
 }
 
-func (s *SExpUnquote) IsAtom() bool { return false }
-func (s *SExpUnquote) IsCons() bool { return false }
-func (s *SExpUnquote) IsList() bool { return false }
-
 func (s *SExpUnquote) ToSExpString() string {
 	ret := ","
 	if s.splice {
@@ -260,6 +241,21 @@ func (s *SExpUnquote) ToSExpString() string {
 }
 func (s *SExpUnquote) ToValue() interface{} {
 	return s.sexp.ToValue()
+}
+
+type SExpWrapper struct {
+	buf []byte
+}
+
+func (s *SExpWrapper) ToSExpString() string {
+	return string(s.buf)
+}
+func (s *SExpWrapper) ToValue() interface{} {
+	panic("BUG")
+}
+
+func AstWrapper(v []byte) *SExpWrapper {
+	return &SExpWrapper{v}
 }
 
 /// AST utilities

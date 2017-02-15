@@ -2,7 +2,6 @@ package elrpc
 
 import (
 	"bytes"
-	"encoding/base64"
 	"math"
 	"reflect"
 	"runtime"
@@ -246,28 +245,6 @@ func newMapEncoder(t reflect.Type) encoderFunc {
 	return me.encode
 }
 
-func encodeByteSlice(e *encodeState, v reflect.Value, _ bool) {
-	if v.IsNil() {
-		e.WriteString("nil")
-		return
-	}
-	s := v.Bytes()
-	e.WriteByte('"')
-	if len(s) < 1024 {
-		// for small buffers, using Encode directly is much faster.
-		dst := make([]byte, base64.StdEncoding.EncodedLen(len(s)))
-		base64.StdEncoding.Encode(dst, s)
-		e.Write(dst)
-	} else {
-		// for large buffers, avoid unnecessary extra temporary
-		// buffer space.
-		enc := base64.NewEncoder(base64.StdEncoding, e)
-		enc.Write(s)
-		enc.Close()
-	}
-	e.WriteByte('"')
-}
-
 // sliceEncoder just wraps an arrayEncoder, checking to make sure the value isn't nil.
 type sliceEncoder struct {
 	arrayEnc encoderFunc
@@ -282,10 +259,6 @@ func (se *sliceEncoder) encode(e *encodeState, v reflect.Value, _ bool) {
 }
 
 func newSliceEncoder(t reflect.Type) encoderFunc {
-	// Byte slices get special treatment; arrays don't.
-	if t.Elem().Kind() == reflect.Uint8 {
-		return encodeByteSlice
-	}
 	enc := &sliceEncoder{newArrayEncoder(t)}
 	return enc.encode
 }

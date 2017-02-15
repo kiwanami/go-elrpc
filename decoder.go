@@ -32,3 +32,13 @@ func DecodeToSExp(sexp string) ([]parser.SExp, error) {
 	}
 	return sexps, nil
 }
+
+/// utilities for the result not-typed object
+
+func ToArray(o interface{}) []interface{} {
+	arr, ok := o.([]interface{})
+	if !ok {
+		return nil
+	}
+	return arr
+}
