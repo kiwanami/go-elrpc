@@ -69,7 +69,7 @@ func (s *Lexer) Init(input string) {
 	s.start = 0
 	s.width = 0
 	s.lastPos = 0
-	s.items = make(chan item)
+	s.items = make(chan item, 1)
 	go s.run()
 }
 

@@ -236,7 +236,7 @@ func TestEpcError1(t *testing.T) {
 		}
 
 		// serialize error (client side)
-		_, err = cl.Call("echo", make(chan int))
+		_, err = cl.Call("echo", make(chan int, 1))
 		if err != nil {
 			s := err.Error()
 			if !strings.Contains(s, "unsupported type: chan int") {

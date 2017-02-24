@@ -37,7 +37,7 @@ func TestRpcEcho(t *testing.T) {
 	server := makeRPCServer("Echo1", mockConn, nil)
 	//server.SetDebug(true)
 	defer server.Stop()
-	wt := make(chan interface{})
+	wt := make(chan interface{}, 1)
 	go func() {
 		ret, err := server.Call("echo", "test1")
 		if err != nil {

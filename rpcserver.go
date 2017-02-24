@@ -266,12 +266,12 @@ func makeRPCServer(name string, socket net.Conn, methods []*Method) *RPCServer {
 		socketOut:    bufio.NewWriter(socket),
 		methods:      make(map[string]*Method),
 		session:      make(map[int]chan *methodResult),
-		sendingQueue: make(chan message),
+		sendingQueue: make(chan message, 1),
 
-		user2svChan: make(chan *serverMsg),
-		rcv2svChan:  make(chan workerMsg),
-		snd2svChan:  make(chan workerMsg),
-		sv2sndChan:  make(chan workerMsg),
+		user2svChan: make(chan *serverMsg, 1),
+		rcv2svChan:  make(chan workerMsg, 1),
+		snd2svChan:  make(chan workerMsg, 1),
+		sv2sndChan:  make(chan workerMsg, 1),
 		exitHook:    []func(){},
 	}
 
@@ -350,7 +350,7 @@ func (s *RPCServer) serverWorker() {
 func (s *RPCServer) addExitHook(f func()) {
 	msg := &serverMsg{
 		msg:      serverAddExitHook,
-		response: make(chan interface{}),
+		response: make(chan interface{}, 1),
 	}
 	go func() {
 		s.user2svChan <- msg
@@ -531,7 +531,7 @@ func (s *RPCServer) Stop() error {
 		return nil
 	}
 	s.debugf("waiting for workers shutdown: ")
-	response := make(chan interface{})
+	response := make(chan interface{}, 1)
 	s.user2svChan <- &serverMsg{
 		msg:      serverStop,
 		response: response,
@@ -566,7 +566,7 @@ func (s *RPCServer) Call(name string, args ...interface{}) (interface{}, error) 
 		method: name,
 		args:   args,
 	}
-	rcvChan := make(chan *methodResult)
+	rcvChan := make(chan *methodResult, 1)
 	s.session[uid] = rcvChan
 	s.sendingQueue <- msg
 	result := <-rcvChan
@@ -582,7 +582,7 @@ func (s *RPCServer) QueryMethods() ([]*MethodDesc, error) {
 	}
 	uid := genuid()
 	msg := &messageMethod{uid: uid}
-	rcvChan := make(chan *methodResult)
+	rcvChan := make(chan *methodResult, 1)
 	s.session[uid] = rcvChan
 	s.sendingQueue <- msg
 	result := <-rcvChan
