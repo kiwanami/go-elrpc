@@ -58,12 +58,14 @@ func testDecodeObject(t *testing.T, msg string, src string, exp interface{}) {
 		}
 	}()
 	res, _ := Decode1(src)
-	//pp.Println(res)
+	//aa, _ := DecodeToSExp(src)
+	//pp.Println(aa[0])
 	compareObjectString(t, msg, res, exp)
 }
 
 func TestPrimitives1(t *testing.T) {
 	data := map[string]srcdata{
+		"nil":      srcdata{"nil", nil},
 		"nil list": srcdata{"()", nil},
 		"list1":    srcdata{"(1)", []interface{}{1}},
 		"list2":    srcdata{"(1 2)", []interface{}{1, 2}},

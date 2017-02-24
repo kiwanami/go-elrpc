@@ -70,9 +70,9 @@ func MakeMethod(name string, proc interface{}, argdoc string, docstring string) 
 }
 
 type MethodDesc struct {
-	name      string
-	argdoc    string
-	docstring string
+	Name      string
+	Argdoc    string
+	Docstring string
 }
 
 type methodResult struct {
@@ -216,17 +216,18 @@ const (
 	workerClosed
 )
 
-type serverMsg struct {
-	msg      serverMsgType
-	response chan interface{}
-}
-
 type serverMsgType int
 
 const (
 	_ serverMsgType = iota
 	serverStop
+	serverAddExitHook
 )
+
+type serverMsg struct {
+	msg      serverMsgType
+	response chan interface{}
+}
 
 type RPCServer struct {
 	logger    *log.Logger
@@ -243,6 +244,7 @@ type RPCServer struct {
 	rcv2svChan  chan workerMsg  // channel from receiver to server
 	snd2svChan  chan workerMsg  // channel from sender to server
 	sv2sndChan  chan workerMsg  // channel from server to sender
+	exitHook    []func()        // server exit hook function
 }
 
 func (s *RPCServer) SetDebug(d bool) {
@@ -270,6 +272,7 @@ func makeRPCServer(name string, socket net.Conn, methods []*Method) *RPCServer {
 		rcv2svChan:  make(chan workerMsg),
 		snd2svChan:  make(chan workerMsg),
 		sv2sndChan:  make(chan workerMsg),
+		exitHook:    []func(){},
 	}
 
 	if methods != nil {
@@ -292,7 +295,7 @@ func (s *RPCServer) serverWorker() {
 	for {
 		select {
 		case ev := <-s.user2svChan:
-			s.debugf("ServerWorker: receive stop signal [%v]", ev)
+			s.debugf("ServerWorker: receive comm signal [%v]", ev)
 			switch ev.msg {
 			case serverStop:
 				if s.socketState == socketStateOpened {
@@ -304,6 +307,10 @@ func (s *RPCServer) serverWorker() {
 				defer func() {
 					ev.response <- socketErr
 				}()
+			case serverAddExitHook:
+				s.exitHook = append(s.exitHook, func() {
+					ev.response <- "exited"
+				})
 			}
 		case rev := <-s.rcv2svChan:
 			s.debugf("ServerWorker: receive receiver signal [%v]", rev)
@@ -333,9 +340,50 @@ func (s *RPCServer) serverWorker() {
 	close(s.snd2svChan)
 	close(s.sv2sndChan)
 	close(s.rcv2svChan)
+	s.cleanupSessions()
+	s.execExitHook()
 	s.debugf("ServerWorker exited: sockerr: %v, send:%v,  recv:%v",
 		socketErr, senderState, receiverState)
 	close(s.user2svChan)
+}
+
+func (s *RPCServer) addExitHook(f func()) {
+	msg := &serverMsg{
+		msg:      serverAddExitHook,
+		response: make(chan interface{}),
+	}
+	go func() {
+		s.user2svChan <- msg
+		<-msg.response // wait for exit event
+		f()
+	}()
+}
+
+func (s *RPCServer) execExitHook() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Printf("ExitHook: panic error : %+v\n", r)
+		}
+	}()
+	if len(s.exitHook) > 0 {
+		for _, f := range s.exitHook {
+			f()
+		}
+	}
+}
+
+func (s *RPCServer) cleanupSessions() {
+	for k := range s.session {
+		session := s.session[k]
+		mresult := &methodResult{
+			success: false,
+			value:   nil,
+			err:     fmt.Errorf("unexpected peer's shutdown"),
+		}
+		go func() {
+			session <- mresult
+		}()
+	}
 }
 
 func (s *RPCServer) senderWorker() {
@@ -367,7 +415,7 @@ Loop:
 					_ = s.receiveReturnEpcError(Array("epc-error", sndmsg.msgID(), err.Error()))
 				}
 			} else {
-				s.debugf("SenderWoker: sent a message. [%v]\n", err)
+				s.debugf("SenderWoker: sent a message. [err:%v]\n", err)
 			}
 			s.debugf("SenderWoker: try next message.")
 		}
@@ -406,6 +454,7 @@ func (s *RPCServer) receiverWorker() {
 			s.logger.Println("ReceiverWorker: read body error :" + err.Error())
 			break
 		}
+		s.debugf("[[ %v ]]", string(bodybuf))
 		bodyObj, err := Decode1(string(bodybuf))
 		if err != nil {
 			s.logger.Println("ReceiverWorker: body parse error: " + err.Error())
@@ -437,7 +486,7 @@ func (s *RPCServer) receiverWorker() {
 			err = s.receiveReturn(bodyArr)
 		case "return-error":
 			err = s.receiveReturnError(bodyArr)
-		case "epc-return":
+		case "epc-error":
 			err = s.receiveReturnEpcError(bodyArr)
 		case "methods":
 			err = s.receiveMethods(bodyArr)
@@ -477,11 +526,6 @@ func (s *RPCServer) IsRunning() bool {
 	return s.socketState == socketStateOpened
 }
 
-func (s *RPCServer) Start() error {
-	// TODO
-	return nil
-}
-
 func (s *RPCServer) Stop() error {
 	if !s.IsRunning() {
 		return nil
@@ -498,6 +542,14 @@ func (s *RPCServer) Stop() error {
 		return nil
 	}
 	return ret.(error)
+}
+
+func (s *RPCServer) Wait() {
+	w := make(chan bool, 1)
+	s.addExitHook(func() {
+		w <- true
+	})
+	<-w
 }
 
 func (s *RPCServer) RegisterMethod(m *Method) {
@@ -524,7 +576,7 @@ func (s *RPCServer) Call(name string, args ...interface{}) (interface{}, error) 
 	return result.value, nil
 }
 
-func (s *RPCServer) QueryMethods() ([]MethodDesc, error) {
+func (s *RPCServer) QueryMethods() ([]*MethodDesc, error) {
 	if s.socketState != socketStateOpened {
 		return nil, fmt.Errorf("epc not connected")
 	}
@@ -537,7 +589,21 @@ func (s *RPCServer) QueryMethods() ([]MethodDesc, error) {
 	if !result.success {
 		return nil, result.err
 	}
-	return result.value.([]MethodDesc), nil
+	vs, ok := result.value.([]interface{})
+	if !ok {
+		val := reflect.ValueOf(result.value)
+		return nil, fmt.Errorf("invalid method query result: %v %v", result.value, val.Kind().String())
+	}
+	ms := make([]*MethodDesc, len(vs))
+	for i, vv := range vs {
+		mstrs := vv.([]interface{})
+		ms[i] = &MethodDesc{
+			Name:      mstrs[0].(string),
+			Argdoc:    mstrs[1].(string),
+			Docstring: mstrs[2].(string),
+		}
+	}
+	return ms, nil
 }
 
 func (s *RPCServer) sendMessage(m message) error {
@@ -571,10 +637,21 @@ func (s *RPCServer) receiveCall(bodyArr []interface{}) (err error) {
 	if !ok {
 		return fmt.Errorf("method name is not string [%v]", bodyArr[2])
 	}
-	args, ok := bodyArr[3].([]interface{})
-	if !ok {
-		return fmt.Errorf("arguments object is not list [%v]", bodyArr[3])
+
+	var args []interface{}
+	switch bodyArr[3].(type) {
+	case nil:
+		args = []interface{}{}
+	case []interface{}:
+		args, ok = bodyArr[3].([]interface{})
+		if !ok {
+			return fmt.Errorf("arguments object is not list [%v]", bodyArr[3])
+		}
+	default:
+		val := reflect.ValueOf(bodyArr[3])
+		return fmt.Errorf("arguments object is not list [%v, %v]", bodyArr[3], val.Kind().String())
 	}
+
 	s.debugf(": called: name=%s : uid=%d", name, uid)
 	method, ok := s.methods[name]
 	if !ok {
@@ -593,10 +670,12 @@ func (s *RPCServer) receiveCall(bodyArr []interface{}) (err error) {
 		return fmt.Errorf("different argument length: expected %d, but received %d",
 			len(method.argTypes), len(args))
 	}
+	s.debugf(": extracting arguments: %v", len(args))
 	argv := make([]reflect.Value, len(args))
 	for i := 0; i < len(args); i++ {
 		av := reflect.ValueOf(args[i])
 		it := method.argTypes[i]
+		s.debugf("   : %v : %v -> %v", args[i], av.Type().Kind(), it.Kind())
 		if av.Type().Kind() != it.Kind() {
 			av = av.Convert(it)
 		}
@@ -619,10 +698,13 @@ func (s *RPCServer) receiveCall(bodyArr []interface{}) (err error) {
 
 		s.debugf(": executing: name=%s : uid=%d", name, uid)
 		retv := method.mfunc.Call(argv)
-		rmsg := &messageReturn{
-			uid:   uid,
-			value: retv[0].Interface(),
+		var vv interface{}
+		if len(retv) == 0 {
+			vv = nil
+		} else {
+			vv = retv[0].Interface()
 		}
+		rmsg := &messageReturn{uid: uid, value: vv}
 		s.sendingQueue <- rmsg
 		s.debugf(": executing DONE: name=%s : uid=%d", name, uid)
 	}()

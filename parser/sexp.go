@@ -647,7 +647,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 		//line sexp.go.y:124
 		{
-			yyVAL.expr = &SExpSymbol{literal: yyDollar[1].token.literal}
+			yyVAL.expr = AstSymbol(yyDollar[1].token.literal)
 		}
 	case 29:
 		yyDollar = yyS[yypt-1 : yypt+1]

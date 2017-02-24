@@ -122,7 +122,7 @@ unquote
 symbol
       : SYMBOL
       {
-          $$ = &SExpSymbol{literal: $1.literal}
+          $$ = AstSymbol($1.literal)
       }
 
 character

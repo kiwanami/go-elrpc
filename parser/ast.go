@@ -268,7 +268,10 @@ func AstFloat(v string) *SExpFloat {
 	return &SExpFloat{literal: v}
 }
 
-func AstSymbol(v string) *SExpSymbol {
+func AstSymbol(v string) SExp {
+	if v == "nil" {
+		return AstNil()
+	}
 	return &SExpSymbol{literal: v}
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/k0kubun/pp"
 )
 
-func TestServerStop(t *testing.T) {
+func TestRpcServerStop(t *testing.T) {
 	mockConn := makeMockConn()
 	server := makeRPCServer("ServerStop", mockConn, nil)
 	if !server.IsRunning() {
@@ -20,7 +20,7 @@ func TestServerStop(t *testing.T) {
 	server.Stop()
 }
 
-func TestCloseByRemote(t *testing.T) {
+func TestRpcCloseByRemote(t *testing.T) {
 	mockConn := makeMockConn()
 	server := makeRPCServer("CloseByRemote", mockConn, nil)
 	mockConn.Close()
@@ -32,7 +32,7 @@ func TestCloseByRemote(t *testing.T) {
 	}
 }
 
-func TestEcho(t *testing.T) {
+func TestRpcEcho(t *testing.T) {
 	mockConn := makeMockConn()
 	server := makeRPCServer("Echo1", mockConn, nil)
 	//server.SetDebug(true)
@@ -68,7 +68,7 @@ func TestEcho(t *testing.T) {
 	}
 }
 
-func TestEcho2(t *testing.T) {
+func TestRpcEcho2(t *testing.T) {
 	mockConn := makeMockConn()
 	ms := []*Method{
 		MakeMethod("echo", func(msg string) string {
@@ -113,7 +113,7 @@ func testErrorReturn(t *testing.T, conn *mockConn, name string, args interface{}
 	}
 }
 
-func TestError1(t *testing.T) {
+func TestRpcError1(t *testing.T) {
 	mockConn := makeMockConn()
 	ms := []*Method{
 		MakeMethod("errorMethod", func(i int) int {
@@ -128,7 +128,7 @@ func TestError1(t *testing.T) {
 	testErrorReturn(t, mockConn, "errorMethod", "0", "(return-error %d \"Go error: runtime error: integer divide by zero\")")
 }
 
-func TestEpcError1(t *testing.T) {
+func TestRpcEpcError1(t *testing.T) {
 	mockConn := makeMockConn()
 	ms := []*Method{
 		MakeMethod("epcerror", func(i int) interface{} {
@@ -150,7 +150,7 @@ func TestEpcError1(t *testing.T) {
 	testErrorReturn(t, mockConn, "epcerror", "1", "(epc-error %d \"epc error: sexp encode: unsupported type: func(unsafe.Pointer, uintptr) uintptr\")")
 }
 
-func TestMethods1(t *testing.T) {
+func TestRpcMethods1(t *testing.T) {
 	mockConn := makeMockConn()
 	ms := []*Method{
 		MakeMethod("echo", func(i int) interface{} {
