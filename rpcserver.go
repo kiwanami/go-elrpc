@@ -638,18 +638,11 @@ func (s *RPCServer) receiveCall(bodyArr []interface{}) (err error) {
 		return fmt.Errorf("method name is not string [%v]", bodyArr[2])
 	}
 
-	var args []interface{}
-	switch bodyArr[3].(type) {
-	case nil:
-		args = []interface{}{}
-	case []interface{}:
-		args, ok = bodyArr[3].([]interface{})
-		if !ok {
-			return fmt.Errorf("arguments object is not list [%v]", bodyArr[3])
-		}
-	default:
-		val := reflect.ValueOf(bodyArr[3])
-		return fmt.Errorf("arguments object is not list [%v, %v]", bodyArr[3], val.Kind().String())
+	argsv := reflect.ValueOf(bodyArr[3])
+	if !argsv.IsValid() || argsv.IsNil() {
+		argsv = reflect.ValueOf([]interface{}{})
+	} else if argsv.Kind() != reflect.Slice {
+		return fmt.Errorf("arguments object is not list [%v, %v]", bodyArr[3], argsv.Kind().String())
 	}
 
 	s.debugf(": called: name=%s : uid=%d", name, uid)
@@ -662,22 +655,31 @@ func (s *RPCServer) receiveCall(bodyArr []interface{}) (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("type invalid error : %s", r)
+			err = fmt.Errorf("type invalid error : %+v", r)
 		}
 	}()
+	argsvlen := argsv.Len()
 
-	if len(args) != len(method.argTypes) {
+	if argsvlen != len(method.argTypes) {
 		return fmt.Errorf("different argument length: expected %d, but received %d",
-			len(method.argTypes), len(args))
+			len(method.argTypes), argsvlen)
 	}
-	s.debugf(": extracting arguments: %v", len(args))
-	argv := make([]reflect.Value, len(args))
-	for i := 0; i < len(args); i++ {
-		av := reflect.ValueOf(args[i])
+	s.debugf(": extracting arguments: %v", argsvlen)
+	argv := make([]reflect.Value, argsvlen)
+	for i := 0; i < argsvlen; i++ {
+		av := reflect.ValueOf(argsv.Index(i).Interface())
 		it := method.argTypes[i]
-		s.debugf("   : %v : %v -> %v", args[i], av.Type().Kind(), it.Kind())
+		s.debugf("   : %v : %v -> %v", av.Interface(), av.Type().Kind(), it.Kind())
 		if av.Type().Kind() != it.Kind() {
-			av = av.Convert(it)
+			av, err = ConvertType(it, av)
+			if err != nil {
+				return fmt.Errorf("can not convert type: [%v] : type[%v] -> type[%v]", av, av.Type().String(), it.String())
+			}
+		} else if av.Type().Kind() == reflect.Slice && it.Kind() == reflect.Slice {
+			av, err = ConvertType(it, av)
+			if err != nil {
+				return fmt.Errorf("can not convert type: [%v] : type[%v] -> type[%v]", av, av.Type().String(), it.String())
+			}
 		}
 		argv[i] = av
 	}

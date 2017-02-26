@@ -95,6 +95,83 @@ func (s *SExpFloat) ToValue() interface{} {
 	return f
 }
 
+func inferArrayType(lst []SExp) string {
+	if len(lst) == 0 {
+		return "interface"
+	}
+	var ty string
+	switch lst[0].(type) {
+	case *SExpChar, *SExpString, *SExpSymbol:
+		ty = "string"
+	case *SExpFloat:
+		ty = "float"
+	case *SExpInt:
+		ty = "int"
+	default:
+		return "interface"
+	}
+	for _, v := range lst {
+		switch v.(type) {
+		case *SExpChar:
+			if ty != "string" {
+				return "interface"
+			}
+		case *SExpFloat:
+			if ty == "int" {
+				ty = "float"
+			} else if ty != "float" {
+				return "interface"
+			}
+		case *SExpInt:
+			if ty != "float" && ty != "int" {
+				return "interface"
+			}
+		default:
+			return "interface"
+		}
+	}
+	return ty
+}
+
+func typedSlice(lst []SExp) interface{} {
+	len := len(lst)
+	typ := inferArrayType(lst)
+	// pp.Println(lst)
+	// fmt.Println("typedSlice: " + typ)
+	switch typ {
+	case "int":
+		ret := make([]int, len)
+		for i := 0; i < len; i++ {
+			s := lst[i].(*SExpInt)
+			v, _ := strconv.Atoi(s.literal)
+			ret[i] = v
+		}
+		return ret
+	case "float":
+		ret := make([]float64, len)
+		for i := 0; i < len; i++ {
+			s := lst[i].(*SExpFloat)
+			v, _ := strconv.ParseFloat(s.literal, 64)
+			ret[i] = v
+		}
+		return ret
+	case "string":
+		ret := make([]string, len)
+		for i := 0; i < len; i++ {
+			s := lst[i].ToValue()
+			v, _ := s.(string)
+			ret[i] = v
+		}
+		return ret
+	default:
+	}
+	ret := make([]interface{}, len)
+	for i, e := range lst {
+		ret[i] = e.ToValue()
+	}
+	return ret
+}
+
 type AbstSExpCons struct{}
 
 func (s *AbstSExpCons) ToSExpString() string { return "--CONS--" }
@@ -108,7 +185,8 @@ func (s *SExpCons) ToSExpString() string {
 	return "(" + s.car.ToSExpString() + " . " + s.cdr.ToSExpString() + ")"
 }
 func (s *SExpCons) ToValue() interface{} {
-	return []interface{}{s.car.ToValue(), s.cdr.ToValue()}
+	return typedSlice([]SExp{s.car, s.cdr})
+	//return []interface{}{s.car.ToValue(), s.cdr.ToValue()}
 }
 
 type SExpList struct {
@@ -133,11 +211,7 @@ func (s *SExpList) ToSExpString() string {
 }
 
 func (s *SExpList) ToValue() interface{} {
-	ret := make([]interface{}, len(s.elements))
-	for i, e := range s.elements {
-		ret[i] = e.ToValue()
-	}
-	return ret
+	return typedSlice(s.elements)
 }
 
 type SExpListDot struct {
@@ -164,12 +238,8 @@ func (s *SExpListDot) ToSExpString() string {
 	return buf.String()
 }
 func (s *SExpListDot) ToValue() interface{} {
-	ret := make([]interface{}, len(s.elements)+1)
-	for i, e := range s.elements {
-		ret[i] = e.ToValue()
-	}
-	ret[len(s.elements)] = s.last.ToValue()
-	return ret
+	aa := append(s.elements, s.last)
+	return typedSlice(aa)
 }
 
 type SExpVector struct {
@@ -193,11 +263,7 @@ func (s *SExpVector) ToSExpString() string {
 	return buf.String()
 }
 func (s *SExpVector) ToValue() interface{} {
-	ret := make([]interface{}, len(s.elements))
-	for i, e := range s.elements {
-		ret[i] = e.ToValue()
-	}
-	return ret
+	return typedSlice(s.elements)
 }
 
 type SExpQuoted struct {

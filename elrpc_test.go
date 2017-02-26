@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -123,7 +124,7 @@ func withEPC(progname string, debug bool, f func(cl Service) error) error {
 			//fmt.Println("SVERR: exited.")
 		}()
 		// start client
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		//fmt.Println("## start client")
 		cl, err := StartClient(pn, nil)
 		if err != nil {
@@ -203,6 +204,65 @@ func TestEpcAdd1(t *testing.T) {
 		rets := ret.(string)
 		if rets != "AB" {
 			t.Errorf("expected[%v] but returned [%v]", "AB", rets)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestManyType1(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		ret, err := cl.Call("format", ">> %d %0.2f", 3, 3.14)
+		if err != nil {
+			return err
+		}
+		exp := ">> 3 3.14"
+		reti := ret.(string)
+		if reti != exp {
+			t.Errorf("expected[%v] but returned [%v]", exp, reti)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestMap1(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		ret, err := cl.Call("mapi", []int{1, 2, 3}, 10)
+		if err != nil {
+			return err
+		}
+		exp := []int{10, 20, 30}
+		reti := ret.([]int)
+		if !reflect.DeepEqual(reti, exp) {
+			t.Errorf("expected[%v] but returned [%v]", exp, reti)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestFlatmap1(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		arg := [][]int{
+			[]int{1, 2, 3},
+			[]int{4, 5, 6, 7, 8},
+			[]int{9, 10},
+		}
+		ret, err := cl.Call("flatmapi", arg, 10.0)
+		if err != nil {
+			return err
+		}
+		exp := []int{10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
+		reti := ret.([]int)
+		if !reflect.DeepEqual(reti, exp) {
+			t.Errorf("expected[%v] but returned [%v]", exp, reti)
 		}
 		return nil
 	})
@@ -292,7 +352,7 @@ func TestEpcQuery1(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(ms) != 8 {
+		if len(ms) != 11 {
 			t.Errorf("expected[%d] but returned [%d]", 8, len(ms))
 		}
 		mdm := make(map[string]*MethodDesc)

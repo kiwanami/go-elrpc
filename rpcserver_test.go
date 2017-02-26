@@ -109,7 +109,7 @@ func testErrorReturn(t *testing.T, conn *mockConn, name string, args interface{}
 	ret := string(sbuf)
 	//pp.Println(ret)
 	if ret != fmt.Sprintf(expectedf, uidCounter.count) {
-		t.Errorf("Could not check the error: %v", ret)
+		t.Errorf("Could not check the error: expected:[%v]  returned:[%v]", expectedf, ret)
 	}
 }
 
