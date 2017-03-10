@@ -60,6 +60,12 @@ type SExpSymbol struct {
 }
 
 func (s *SExpSymbol) ToValue() interface{} {
+	if s.literal == "t" {
+		return true
+	}
+	if s.literal == "nil" {
+		return nil
+	}
 	return s.literal
 }
 
@@ -150,8 +156,16 @@ func typedSlice(lst []SExp) interface{} {
 	case "float":
 		ret := make([]float64, len)
 		for i := 0; i < len; i++ {
-			s := lst[i].(*SExpFloat)
-			v, _ := strconv.ParseFloat(s.literal, 64)
+			var lit string
+			switch lst[i].(type) {
+			case *SExpFloat:
+				s := lst[i].(*SExpFloat)
+				lit = s.literal
+			case *SExpInt:
+				s := lst[i].(*SExpInt)
+				lit = s.literal
+			}
+			v, _ := strconv.ParseFloat(lit, 64)
 			ret[i] = v
 		}
 		return ret

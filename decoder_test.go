@@ -73,6 +73,9 @@ func TestPrimitives1(t *testing.T) {
 		"nil list": srcdata{"()", nil},
 		"list1":    srcdata{"(1)", []int{1}},
 		"list2":    srcdata{"(1 2)", []int{1, 2}},
+		"list3":    srcdata{"(1 2 3.0)", []float64{1.0, 2.0, 3.0}},
+		"list4":    srcdata{"(1 2 \"A\")", []interface{}{1, 2, "A"}},
+		"list5":    srcdata{"(1 2 t nil)", []interface{}{1, 2, true, nil}},
 		"nest list1": srcdata{"(1 (2 3) 4)",
 			[]interface{}{1, []int{2, 3}, 4}},
 		"nest list2": srcdata{"(((1)))",
@@ -148,7 +151,7 @@ func TestConvertArray1(t *testing.T) {
 	}
 }
 
-func TestConvertDArray2(t *testing.T) {
+func TestConvertDoubleArray1(t *testing.T) {
 	srcVal1 := []interface{}{
 		[]int{1, 2, 3},
 		[]int{4, 5, 6},
