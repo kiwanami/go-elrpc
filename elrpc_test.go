@@ -19,8 +19,8 @@ func withProcess(args []string, f func(cmd *exec.Cmd) error) error {
 	// create a new process group for our child by setting the Setpgid field
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	defer func() {
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
-		cmd.Wait()
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+		_ = cmd.Wait()
 	}()
 	return f(cmd)
 }
