@@ -186,7 +186,6 @@ func (s *SExpCons) ToSExpString() string {
 }
 func (s *SExpCons) ToValue() interface{} {
 	return typedSlice([]SExp{s.car, s.cdr})
-	//return []interface{}{s.car.ToValue(), s.cdr.ToValue()}
 }
 
 type SExpList struct {
