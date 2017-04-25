@@ -2,6 +2,7 @@ package elrpc
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,9 +10,8 @@ import (
 	"net"
 	"os"
 	"reflect"
-	"sync"
-
 	"strconv"
+	"sync"
 
 	"github.com/kiwanami/go-elrpc/parser"
 )
@@ -183,6 +183,21 @@ func (m *messageEpcError) ToAst() (parser.SExp, error) {
 		parser.AstSymbol("epc-error"),
 		parser.AstInt(strconv.Itoa(m.uid)),
 		parser.AstWrapper(val),
+	), nil
+}
+
+type messageCancel struct {
+	uid int
+}
+
+func (m *messageCancel) msgID() int {
+	return m.uid
+}
+
+func (m *messageCancel) ToAst() (parser.SExp, error) {
+	return parser.AstListv(
+		parser.AstSymbol("cancel"),
+		parser.AstInt(strconv.Itoa(m.uid)),
 	), nil
 }
 
@@ -485,6 +500,8 @@ func (s *RPCServer) receiverWorker() {
 				s.logger.Println("ReceiverWorker: send epc-return: " + err.Error())
 				err = nil
 			}
+		case "cancel":
+			err = s.receiveCancel(bodyArr)
 		case "return":
 			err = s.receiveReturn(bodyArr)
 		case "return-error":
@@ -555,6 +572,13 @@ func (s *RPCServer) Wait() {
 	<-w
 }
 
+func (s *RPCServer) WaitingSessionNum() int {
+	s.sessionMutex.RLock()
+	ret := len(s.session)
+	s.sessionMutex.RUnlock()
+	return ret
+}
+
 func (s *RPCServer) RegisterMethod(m *Method) {
 	s.methods[m.name] = m
 }
@@ -579,6 +603,33 @@ func (s *RPCServer) Call(name string, args ...interface{}) (interface{}, error) 
 		return nil, result.err
 	}
 	return result.value, nil
+}
+
+func (s *RPCServer) CallContext(ctx context.Context, name string, args ...interface{}) (interface{}, error) {
+	if s.socketState != socketStateOpened {
+		return nil, fmt.Errorf("epc not connected")
+	}
+	uid := genuid()
+	msg := &messageCall{
+		uid:    uid,
+		method: name,
+		args:   args,
+	}
+	rcvChan := make(chan *methodResult, 1)
+	s.sessionMutex.Lock()
+	s.session[uid] = rcvChan
+	s.sessionMutex.Unlock()
+	s.sendingQueue <- msg
+	select {
+	case <-ctx.Done():
+		s.sendCanceling(uid)
+		return nil, fmt.Errorf("Canceled")
+	case result := <-rcvChan:
+		if !result.success {
+			return nil, result.err
+		}
+		return result.value, nil
+	}
 }
 
 func (s *RPCServer) QueryMethods() ([]*MethodDesc, error) {
@@ -611,6 +662,14 @@ func (s *RPCServer) QueryMethods() ([]*MethodDesc, error) {
 		}
 	}
 	return ms, nil
+}
+
+func (s *RPCServer) sendCanceling(uid int) {
+	msg := &messageCancel{uid: uid}
+	s.sessionMutex.Lock()
+	delete(s.session, uid)
+	s.sessionMutex.Unlock()
+	s.sendingQueue <- msg
 }
 
 func (s *RPCServer) sendMessage(m message) error {
@@ -802,6 +861,20 @@ func (s *RPCServer) receiveReturnEpcError(bodyArr []interface{}) (err error) {
 	go func() {
 		session <- mresult
 	}()
+	return nil
+}
+
+func (s *RPCServer) receiveCancel(bodyArr []interface{}) (err error) {
+	uid, ok := bodyArr[1].(int)
+	if !ok {
+		return fmt.Errorf("uid is not int [%v]", bodyArr[1])
+	}
+	s.debugf(": cancel: uid=%d", uid)
+	// TODO Cancel
+	// check handler function arguments have a context
+	// hold the context for uid
+	// send cancel event to the context
+	// cleanup session info
 	return nil
 }
 

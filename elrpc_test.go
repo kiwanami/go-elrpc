@@ -2,6 +2,7 @@ package elrpc
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"math/rand"
 	"os/exec"
@@ -354,8 +355,8 @@ func TestEpcQuery1(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(ms) != 11 {
-			t.Errorf("expected[%d] but returned [%d]", 8, len(ms))
+		if len(ms) != 12 {
+			t.Errorf("expected[%d] but returned [%d]", 12, len(ms))
 		}
 		mdm := make(map[string]*MethodDesc)
 		for _, md := range ms {
@@ -384,18 +385,84 @@ func TestEpcConcurrency(t *testing.T) {
 		for i := 0; i < loopnum; i++ {
 			wg.Add(1)
 			go func() {
-				val := rand.Int()
-				ret, err := cl.Call("echo", val)
+				dur := rand.Intn(100) // msec
+				ret, err := cl.Call("sleep", dur)
 				if err != nil {
 					errors = append(errors, err)
 				}
-				if ret != val {
-					t.Errorf("Not same result: %v  ->  %v", ret, val)
+				if ret != dur {
+					t.Errorf("Not same result: %v  ->  %v", ret, dur)
 				}
 				wg.Done()
 			}()
 		}
 		wg.Wait()
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestEpcEcho2(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ret, err := cl.CallContext(ctx, "echo", "hello")
+		if err != nil {
+			return err
+		}
+		str := ret.(string)
+		if str != "hello" {
+			t.Errorf("expected[%s] but returned [%s]", "hello", str)
+		}
+		ret, err = cl.Call("echo", 12345)
+		if err != nil {
+			return err
+		}
+		i := ret.(int)
+		if i != 12345 {
+			t.Errorf("expected[%v] but returned [%v]", 12345, i)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestEpcCancel(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		back := make(chan string, 1)
+		go func() {
+			_, err := cl.CallContext(ctx, "sleep", 2000)
+			if err.Error() == "Canceled" {
+				back <- "OK"
+			} else {
+				back <- "NG: Not canceled"
+			}
+		}()
+		for i := 0; i < 30; i++ {
+			time.Sleep(time.Duration(20) * time.Millisecond)
+			wn := cl.WaitingSessionNum()
+			if wn == 1 {
+				break
+			}
+			if i > 20 {
+				return fmt.Errorf("Wrong waiting sessions: %v != 1", wn)
+			}
+		}
+		cancel()
+		time.Sleep(time.Duration(100) * time.Millisecond) // wait for cancel msg
+		ret := <-back
+		if ret != "OK" {
+			return fmt.Errorf("Could not canceled")
+		}
+		if wn := cl.WaitingSessionNum(); wn != 0 {
+			return fmt.Errorf("Wrong waiting sessions: %v != 0", wn)
+		}
 		return nil
 	})
 	if err != nil {

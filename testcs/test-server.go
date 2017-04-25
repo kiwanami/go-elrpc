@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-
 	"os"
+	"time"
 
 	"github.com/kiwanami/go-elrpc"
 )
@@ -79,6 +79,11 @@ func main() {
 	s.RegisterMethod(elrpc.MakeMethod("killme", func() {
 		os.Exit(0)
 	}, "", "exit server"))
+
+	s.RegisterMethod(elrpc.MakeMethod("sleep", func(msec int) int {
+		time.Sleep(time.Duration(msec) * time.Millisecond)
+		return msec
+	}, "msec: sleep duration in millisecond", "sleep"))
 
 	// accept for peer's connection
 	if *debug {

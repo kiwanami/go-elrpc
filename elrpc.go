@@ -2,6 +2,7 @@ package elrpc
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -42,8 +43,10 @@ type Service interface {
 	Stop() error
 	RegisterMethod(m *Method)
 	Call(name string, args ...interface{}) (interface{}, error)
+	CallContext(ctx context.Context, name string, args ...interface{}) (interface{}, error)
 	QueryMethods() ([]*MethodDesc, error)
 	Wait()
+	WaitingSessionNum() int
 }
 
 /// Server
