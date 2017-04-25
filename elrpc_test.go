@@ -3,10 +3,12 @@ package elrpc
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -366,6 +368,34 @@ func TestEpcQuery1(t *testing.T) {
 			t.Errorf("expected[%v] but returned [%v]", "concat string", md.Docstring)
 		}
 
+		return nil
+	})
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestEpcConcurrency(t *testing.T) {
+	err := withEPC("testcs/test-server.go", false, func(cl Service) error {
+		rand.Seed(1)
+		loopnum := 10000
+		var errors = []error{}
+		var wg sync.WaitGroup
+		for i := 0; i < loopnum; i++ {
+			wg.Add(1)
+			go func() {
+				val := rand.Int()
+				ret, err := cl.Call("echo", val)
+				if err != nil {
+					errors = append(errors, err)
+				}
+				if ret != val {
+					t.Errorf("Not same result: %v  ->  %v", ret, val)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
 		return nil
 	})
 	if err != nil {
