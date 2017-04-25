@@ -186,8 +186,6 @@ func (s *Lexer) run() {
 // implementation of stateFn
 
 func scanNextAction(s *Lexer) stateFn {
-	printState()
-
 	switch r := s.next(); {
 	case r == EOF:
 		return nil
@@ -212,8 +210,6 @@ func scanNextAction(s *Lexer) stateFn {
 }
 
 func scanCommentRest(s *Lexer) stateFn {
-	printState()
-
 Loop:
 	for {
 		switch s.next() {
@@ -229,8 +225,6 @@ Loop:
 }
 
 func scanCharLiteral(s *Lexer) stateFn {
-	printState()
-
 	r := s.next()
 	if r == EOF {
 		return nil
@@ -247,8 +241,6 @@ func scanCharLiteral(s *Lexer) stateFn {
 }
 
 func scanNumberOrSymbol(s *Lexer) stateFn {
-	printState()
-
 	r := s.next()
 
 	if r == '+' || r == '-' {
@@ -291,15 +283,12 @@ func scanSpace(s *Lexer) stateFn {
 		}
 	}
 	if s.start < s.pos {
-		printState()
 		s.emit(itemSpace)
 	}
 	return scanNextAction
 }
 
 func scanNumber(s *Lexer) stateFn {
-	printState()
-
 	item := itemInteger
 
 	s.accept("+-")
@@ -320,8 +309,6 @@ func scanNumber(s *Lexer) stateFn {
 }
 
 func scanSymbolRest(s *Lexer) stateFn {
-	printState()
-
 Loop:
 	for {
 		r := s.next()
@@ -345,8 +332,6 @@ Loop:
 }
 
 func scanStringRest(s *Lexer) stateFn {
-	printState()
-
 Loop:
 	for {
 		switch s.next() {
@@ -365,6 +350,7 @@ Loop:
 	return scanSpace
 }
 
+// call graph for debug
 func printState() {
 	fpcs := make([]uintptr, 1)
 	n := runtime.Callers(2, fpcs)
