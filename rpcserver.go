@@ -230,12 +230,13 @@ type serverMsg struct {
 }
 
 type RPCServer struct {
-	logger    *log.Logger
-	debugMode bool
-	methods   map[string]*Method
-	session   map[int]chan *methodResult
-	socket    net.Conn
-	socketOut *bufio.Writer
+	logger       *log.Logger
+	debugMode    bool
+	methods      map[string]*Method
+	session      map[int]chan *methodResult
+	sessionMutex sync.RWMutex
+	socket       net.Conn
+	socketOut    *bufio.Writer
 
 	sendingQueue chan message
 
@@ -266,7 +267,7 @@ func makeRPCServer(name string, socket net.Conn, methods []*Method) *RPCServer {
 		socketOut:    bufio.NewWriter(socket),
 		methods:      make(map[string]*Method),
 		session:      make(map[int]chan *methodResult),
-		sendingQueue: make(chan message, 1),
+		sendingQueue: make(chan message, 20),
 
 		user2svChan: make(chan *serverMsg, 1),
 		rcv2svChan:  make(chan workerMsg, 1),
@@ -373,6 +374,8 @@ func (s *RPCServer) execExitHook() {
 }
 
 func (s *RPCServer) cleanupSessions() {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
 	for k := range s.session {
 		session := s.session[k]
 		mresult := &methodResult{
@@ -567,7 +570,9 @@ func (s *RPCServer) Call(name string, args ...interface{}) (interface{}, error) 
 		args:   args,
 	}
 	rcvChan := make(chan *methodResult, 1)
+	s.sessionMutex.Lock()
 	s.session[uid] = rcvChan
+	s.sessionMutex.Unlock()
 	s.sendingQueue <- msg
 	result := <-rcvChan
 	if !result.success {
@@ -583,7 +588,9 @@ func (s *RPCServer) QueryMethods() ([]*MethodDesc, error) {
 	uid := genuid()
 	msg := &messageMethod{uid: uid}
 	rcvChan := make(chan *methodResult, 1)
+	s.sessionMutex.Lock()
 	s.session[uid] = rcvChan
+	s.sessionMutex.Unlock()
 	s.sendingQueue <- msg
 	result := <-rcvChan
 	if !result.success {
@@ -722,11 +729,15 @@ func (s *RPCServer) receiveReturn(bodyArr []interface{}) (err error) {
 	value := bodyArr[2]
 	s.debugf(": returned: uid=%d", uid)
 
+	s.sessionMutex.RLock()
 	session, ok := s.session[uid]
+	s.sessionMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("not found a session for uid=%d", uid)
 	}
+	s.sessionMutex.Lock()
 	delete(s.session, uid)
+	s.sessionMutex.Unlock()
 	mresult := &methodResult{
 		success: true,
 		value:   value,
@@ -746,11 +757,15 @@ func (s *RPCServer) receiveReturnError(bodyArr []interface{}) (err error) {
 	errval := bodyArr[2]
 	s.debugf(": returned error: uid=%d  error=%v", uid, errval)
 
+	s.sessionMutex.RLock()
 	session, ok := s.session[uid]
+	s.sessionMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("not found a session for uid=%d", uid)
 	}
+	s.sessionMutex.Lock()
 	delete(s.session, uid)
+	s.sessionMutex.Unlock()
 	mresult := &methodResult{
 		success: false,
 		value:   nil,
@@ -770,11 +785,15 @@ func (s *RPCServer) receiveReturnEpcError(bodyArr []interface{}) (err error) {
 	errval := bodyArr[2]
 	s.debugf(": returned epc-error: uid=%d  error=%v", uid, errval)
 
+	s.sessionMutex.RLock()
 	session, ok := s.session[uid]
+	s.sessionMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("not found a session for uid=%d", uid)
 	}
+	s.sessionMutex.Lock()
 	delete(s.session, uid)
+	s.sessionMutex.Unlock()
 	mresult := &methodResult{
 		success: false,
 		value:   nil,
